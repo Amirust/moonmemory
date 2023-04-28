@@ -21,11 +21,11 @@
 6. Запустить `npm start`
 7. Радоваться
 
-## Linux
+## Unix-like
 1. Скачать и установить [Nodejs](https://nodejs.org/en/download/) (Проверялось на 19 версии, за другие не ручаюсь)
 2. Клонировать репозиторий `git clone https://github.com/Amirust/moonmemory`
 3. Перейти в папку `cd moonmemory` и установить зависимости `npm i`
-4. Скомпилировать `npm run build:linux`
+4. Скомпилировать `npm run build:unix`
 5. Загрузить логи в удобную вам папку и запомнить к ней путь
 6. Запустить `npm start`
 7. Радоваться тому что вы не подоконник :trollface:
