@@ -1,0 +1,51 @@
+{
+  "name": "moonmemory",
+  "version": "1.0.0",
+  "description": "Discord tokens checker",
+  "exports": "./index.js",
+  "scripts": {
+    "start": "node --no-warnings --loader esm-module-alias/loader index.js",
+    "start:fast": "node --no-warnings --loader esm-module-alias/loader index.js --fast",
+    "lint:fix": "eslint --fix .",
+    "build:unix": "rm -rf ./dist && tsc --project tsconfig.json",
+    "build:win": "del /f /s /q dist && tsc --project tsconfig.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Amirust/moonmemory"
+  },
+  "bugs": {
+    "url": "https://github.com/Amirust/moonmemory/issues"
+  },
+  "aliases": {
+    "@src": "dist",
+    "@MoonMemory": "dist",
+    "@root": "./"
+  },
+  "type": "module",
+  "homepage": "https://github.com/Amirust/moonmemory#readme",
+  "keywords": [],
+  "author": "Amirust",
+  "license": "GNU AGPLv3",
+  "devDependencies": {
+    "@types/async": "^3.2.20",
+    "@types/cli-progress": "^3.11.0",
+    "@types/inquirer": "^9.0.3",
+    "@types/node": "^18.16.2",
+    "@typescript-eslint/eslint-plugin": "^5.42.0",
+    "@typescript-eslint/parser": "^5.42.0",
+    "eslint": "^8.25.0",
+    "typescript": "^4.8.4"
+  },
+  "dependencies": {
+    "async": "^3.2.4",
+    "chalk": "^5.2.0",
+    "cli-progress": "^3.12.0",
+    "esm-module-alias": "^2.0.3",
+    "https-proxy-agent": "^5.0.1",
+    "inquirer": "^9.2.0",
+    "node-fetch": "^3.3.1",
+    "piscina": "^3.2.0",
+    "socks-proxy-agent": "^7.0.0"
+  }
+}
