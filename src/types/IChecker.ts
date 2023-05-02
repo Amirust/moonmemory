@@ -21,6 +21,7 @@ interface defaultParams {
     proxyProvider: string;
     source: string;
 	exporter: string;
+	spamCheckSource: string;
     checks: toCheck[];
 }
 

@@ -2,18 +2,18 @@ import fs from 'fs';
 import inquirer from 'inquirer';
 import piscina from 'piscina';
 import chalk from 'chalk';
-import { MessageChannel } from 'worker_threads';
-import cliProgress, { SingleBar } from 'cli-progress';
+import {MessageChannel} from 'worker_threads';
+import cliProgress, {SingleBar} from 'cli-progress';
 import path from 'node:path';
-import { Loader,AsyncLoader } from '@MoonMemory/types/Loader.js';
-import { LoaderInputType } from '@MoonMemory/types/LoaderInputType.js';
-import { defaultParams, checks as checklist, ThreadResult, toCheck } from '@MoonMemory/types/IChecker.js';
-import { createDirIfNotExists, writeFile } from '@MoonMemory/utils/fsUtils.js';
-import { info, success } from '@MoonMemory/utils/logger.js';
+import {AsyncLoader, Loader} from '@MoonMemory/types/Loader.js';
+import {LoaderInputType} from '@MoonMemory/types/LoaderInputType.js';
+import {checks as checklist, defaultParams, ThreadResult, toCheck} from '@MoonMemory/types/IChecker.js';
+import {createDirIfNotExists, writeFile} from '@MoonMemory/utils/fsUtils.js';
+import {info, success} from '@MoonMemory/utils/logger.js';
 import getPhysicalCpusCount from '@MoonMemory/utils/getPhysicalCpusCount.js';
 import chunk from '@MoonMemory/utils/chunk.js';
-import { ProxyProvider } from '@MoonMemory/types/Proxy.js';
-import { Exporter } from '@MoonMemory/types/Exporter.js';
+import {ProxyProvider} from '@MoonMemory/types/Proxy.js';
+import {Exporter} from '@MoonMemory/types/Exporter.js';
 
 function formatbar( progress: number, options: cliProgress.Options ): string
 {
@@ -82,6 +82,7 @@ export default class TerminalUI
 		let selectedProvider: ProxyProvider;
 		let selectedExporter: Exporter;
 		let promptSource: string;
+		let spamCheckSource: string | null = null;
 		let checks: toCheck[];
 
 		if ( !fastStart ) 
@@ -129,11 +130,23 @@ export default class TerminalUI
 			}] );
 			checks = promptedChecks!;
 
+			if ( checks.includes( toCheck.is_spammed ) )
+			{
+				const { promptedSpamCheckSource } = await inquirer.prompt( [{
+					type: 'input',
+					name: 'promptedSpamCheckSource',
+					message: 'Введите путь к файлу с ссылками',
+					validate: ( input: string ) => fs.existsSync( input ) ? true : 'Путь не существует'
+				}] );
+				spamCheckSource = path.resolve( promptedSpamCheckSource );
+			}
+
 			writeFile( 'default_params.json', JSON.stringify( {
 				loader: selectedLoader!.name,
 				proxyProvider: selectedProvider!.name,
 				source: promptSource,
 				exporter: selectedExporter!.name,
+				spamCheckSource: spamCheckSource ?? undefined,
 				checks
 			} as defaultParams ), true );
 
@@ -145,10 +158,12 @@ export default class TerminalUI
 			selectedProvider = providers.find( ( provider: ProxyProvider ) => provider.name === oldParams!.proxyProvider )!;
 			promptSource = oldParams!.source;
 			selectedExporter = exporters.find( ( exporter: Exporter ) => exporter.name === oldParams!.exporter )!;
+			spamCheckSource = oldParams!.spamCheckSource;
 			checks = oldParams!.checks;
 		}
 
-		const proxy = await selectedProvider!.load();
+		const spamUrls = spamCheckSource ? fs.readFileSync( spamCheckSource, 'utf-8' ).split( '\n' ).filter( Boolean ) : null;
+		await selectedProvider!.load();
 		info( `Загружено ${selectedProvider.proxies.length} прокси` );
 		const tokens = await selectedLoader!.load( promptSource );
 		const piscinaInstance = new piscina( {
@@ -199,7 +214,7 @@ export default class TerminalUI
 				if ( !bars[message.id] ) return;
 				bars[message.id].update( message.resolved );
 			} );
-			await piscinaInstance.run( { chunk, proxy: selectedProvider, id, checklist: checks, port: channel.port1 }, { transferList: [channel.port1] } )
+			await piscinaInstance.run( { chunk, proxy: selectedProvider, id, checklist: checks, spamUrls, port: channel.port1 }, { transferList: [channel.port1] } )
 				.catch( console.error )
 				.then( res => { resolvedChunks.push( res ); }
 				);

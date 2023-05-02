@@ -28,7 +28,36 @@ interface IDiscordBillingSource {
     }
 }
 
+interface IDiscordDMChannel {
+    id: string;
+    type: number;
+    last_message_id: string;
+    flags: number;
+    recipients: IDiscordUser[];
+}
+
+interface IDiscordMessage {
+    id: string;
+    type: number;
+    content: string;
+    channel_id: string;
+    author: IDiscordUser;
+    attachments: any[];
+    embeds: any[];
+    mentions: any[];
+    mention_roles: any[];
+    pinned: boolean;
+    mention_everyone: boolean;
+    tts: boolean;
+    timestamp: string;
+    edited_timestamp: string;
+    flags: number;
+    components: any[];
+}
+
 export {
 	IDiscordUser,
-	IDiscordBillingSource
+	IDiscordBillingSource,
+	IDiscordDMChannel,
+	IDiscordMessage
 };

